@@ -29,7 +29,7 @@ for s in islice(model.sample(prompt), 2):
     print(s)  # "131" "561" (independent within sequence)
 ```
 
-After than, the model can again be turned into independent sampling using `Independent`:
+After that, the model can again be turned into independent sampling using `Independent`:
 
 ```
 model = Independent(model)
