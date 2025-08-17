@@ -4,7 +4,7 @@ An LLM cache stores responses from an LLM to avoid recomputation, making runs re
 
 This is a single-file, dependency-free implementation that provides a single API function `sample(prompt: str, batch: int = 1) -> Iterator[str]`. To use it, just copy the file `cached_llm.py` to your project.
 
-## Repeatable and Independent Sampling
+## Independent, Repeatable and Persistent Sampling
 
 Without caching, each call of `sample` returns an independent value:
 
@@ -22,21 +22,23 @@ Using `Repeatable` (in-memory cache), you can change the semantics of `sample` s
 ```
 model = Repeatable(model)
 
-n1 = next(model.sample(prompt))  # "92" 
-n2 = next(model.sample(prompt))  # "92" (same result)
+n3 = next(model.sample(prompt))  # "131" 
+n4 = next(model.sample(prompt))  # "131" (same result)
 
 for s in islice(model.sample(prompt), 2):
-    print(s)  # "92" "747" (independent within sequence)
+    print(s)  # "131" "561" (independent within sequence)
 ```
 
-The model than can again be turned into independent sampling using `Independent`:
+After than, the model can again be turned into independent sampling using `Independent`:
 
 ```
 model = Independent(model)
 
-n1 = next(model.sample(prompt))  # "92" 
-n2 = next(model.sample(prompt))  # "747"
+n5 = next(model.sample(prompt))  # "131" 
+n6 = next(model.sample(prompt))  # "561"
 ```
+
+Note that it will still take values from the in-memory cache from the underying model.
 
 `Persistent` is like `Repeatable`, but it persists across runs of your program:
 
@@ -48,21 +50,18 @@ model = Persistent(model, "~/.llm_cache")
 prompt = "Choose a number between 1 and 1000."
 
 n1 = next(model.sample(prompt))  # "92"
-n2 = next(model.sample(prompt))  # "92" (same result)
-
-for s in islice(model.sample(prompt), 2):
-    print(s)  # "92" "747" (independent within sequence)
+n2 = next(model.sample(prompt))  # "92" (same result across runs)
 ```
 
-## Hybrid Mode
+## Usage Pattern
 
 The recommended way to use this cache is as follows:
 
 1. Most of your code should not rely on whether your `sample` is independent or repeatable/persistent.
-2. If you function relies on independence, it should start with `model = Independent(model)`.
-3. If you function relies on repeatable sampling, it should start with `model = Repeatable(model)`.
+2. If your function relies on independence, it should start with `model = Independent(model)`.
+3. If your function relies on repeatability, it should start with `model = Repeatable(model)`.
 
-This example combines persistent caching with retries (which require independent sampling):
+This example combines persistent caching with retries, which require independent sampling:
 
 ```python
 model = AI302("gpt-4o", 1.0)
@@ -87,17 +86,20 @@ for attempt in range(NUM_RETRIES):
 ## Cache Slicing
 
 To extract only the subset of cache for your current run, use nested cache:
+
 ```python
 model = Persistent(model, "/path/to/original_cache/")
 model = Persistent(model, "/path/to/sliced_cache")
 run_experiment(model)
 ```
+
 After execution, `sliced_cache` contains exactly what’s needed for reproducibility.
 
 
 ## Batch Sampling
 
-Providers differ in max batch size. The cache API decouples provider limits from your experiment setup:
+Providers differ in max batch size. This API decouples provider limits from your experiment setup:
+
 ```python
 model = CloseAI("gpt-4o", 1.0, max_batch=10)
 model = Persistent(model, "~/.llm_cache")
