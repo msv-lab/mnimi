@@ -38,7 +38,7 @@ n5 = next(model.sample(prompt))  # "131"
 n6 = next(model.sample(prompt))  # "561"
 ```
 
-Note that it will still take values from the in-memory cache from the underying model.
+Note that it will still take values from the in-memory cache of the underying model.
 
 `Persistent` is like `Repeatable`, but it persists across runs of your program:
 
