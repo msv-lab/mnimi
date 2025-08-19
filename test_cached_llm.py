@@ -90,6 +90,28 @@ def test_independent():
     assert responses == ["0", "0", "1", "2", "2", "3"]
 
 
+def test_nested_cache(tmp_path):
+    m1 = MockModel({ "prompt": [ "0", "1" ] })
+    c1 = Persistent(m1, f"{tmp_path}/a")
+    s1 = c1.sample("prompt")
+    next(s1)
+    next(s1)
+
+    m2 = MockModel({ "prompt": [ "0", "1" ] })
+    c2 = Persistent(m2, f"{tmp_path}/a")
+    c2_nested = Persistent(m2, f"{tmp_path}/b")
+    s2 = c2_nested.sample("prompt")
+    next(s2)
+
+    m3 = MockModel({ "prompt": [ "0", "1" ] })
+    c3 = Persistent(m3, f"{tmp_path}/b")
+    s3 = c3.sample("prompt")
+    next(s3)
+    next(s3)
+    assert m3.num_iterated == 1
+
+
+
 class MockBufferedModel(_BaseBufferedModel):
 
     def __init__(self, responses, max_batch):

@@ -2,7 +2,7 @@
 
 LLM cache stores responses from an LLM to avoid redundant queries, making runs reproducible, faster, and cheaper, while also enabling deterministic debugging.
 
-This implementation:
+This implementation
 
 - Is single-file, dependency-free, ~300 LOC; to use it, just copy `cached_llm.py` to your project.
 - Provides a single API function `sample(prompt: str, batch: int = 1) -> Iterator[str]`.
@@ -78,16 +78,16 @@ model = Persistent(model, "~/.llm_cache")
 ind_model = Independent(model)
 
 for attempt in range(NUM_RETRIES):
-	try:
+    try:
         rep_model = Repeatable(ind_model)
-	    x = step_1(rep_model)
-	    y = step_2(rep_model, x)
-	    z = step_3(rep_model, y)
-	    break
-	except Exception:
-	    if attempt == NUM_RETRIES - 1:
-			raise Exception("did not get good response")
-		pass
+        x = step_1(rep_model)
+        y = step_2(rep_model, x)
+        z = step_3(rep_model, y)
+        break
+    except Exception as e:
+        if attempt == NUM_RETRIES - 1:
+            raise Exception("did not get good response")
+    pass
 ```
 
 Here, the calls of `sample` are independent across attempts, but repeat across the calls of `step_1`, `step_2` and `step_3` within each individual attempt.
