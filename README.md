@@ -6,7 +6,7 @@ This implementation:
 
 - Is single-file & dependency-free; to use it, just copy `cached_llm.py` to your project.
 - Provides a single API function `sample(prompt: str, batch: int = 1) -> Iterator[str]`.
-- Supports agentic workflows like retries that conflict with caching.
+- Supports agentic workflows like retries that conflict with naive caching.
 - Supports batch sampling (getting multiple responses for a single HTTP request).
 - Supports cache slicing (extracting relevant parts of cache).
 - Supports multiple providers (302.ai, Fireworks, CloseAI, XMCP, etc).
@@ -46,11 +46,10 @@ n5 = next(model.sample(prompt))  # "131"
 n6 = next(model.sample(prompt))  # "561"
 ```
 
-Note that it will still take values from underlying the in-memory cache.
+Note that it will still take values from the underlying in-memory cache.
 
 `Persistent` is like `Repeatable`, but it persists across runs of your program:
 
-Example:
 ```python
 model = AI302("gpt-4o", 1.0)
 model = Persistent(model, "~/.llm_cache")
@@ -137,7 +136,7 @@ This code supports OpenAI-compatile HTTP API, with convenience wrappers for the 
 | CloseAI | `CLOSEAI_API_KEY` |
 | FireworksAI | `FIREWORKS_API_KEY` |
 | XMCP | `XMCP_API_KEY` |
-| OpenAI Compatible | set via API |
+| OpenAI Compatible | set in code |
 
 Since different providers have different names for the same model, the model's cache identifier can be changed by setting `alias`:
 
