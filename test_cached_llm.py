@@ -1,3 +1,4 @@
+from itertools import islice
 from cached_llm import (
     prompt_id,
     Repeatable,
@@ -8,10 +9,10 @@ from cached_llm import (
     BatchedIterator
 )
 
+
 class MockModel(Model):
     def __init__(self, responses):
         self.responses = responses
-        self.num_sample_calls = 0
         self.num_iterated = 0
         super().__init__("mock", 1.0)
 
@@ -34,7 +35,6 @@ class MockModel(Model):
             return self.base.responses[self.prompt][self.index - 1]
 
     def sample(self, prompt: str, batch: int = 1) -> BatchedIterator[str]:
-        self.num_sample_calls += 1
         i = MockModel._MockIterator(self, prompt)
         i.set_batch_size(batch)
         return i
@@ -64,4 +64,75 @@ def test_repeatable():
     assert next(s2) == "1"
     assert next(s1) == "2"
     assert m.num_iterated == 3
-    
+
+
+def test_repeatable_is_stateless():
+    m = MockModel({ "prompt": [ "0", "1", "2", "3", "4" ] })
+    c = Repeatable(m)
+    s1 = c.sample("prompt")
+    assert next(s1) == "0"
+    assert next(s1) == "1"
+    s2 = c.sample("prompt")
+    assert next(s2) == "0"
+
+
+def test_independent():
+    m = Repeatable(MockModel({ "prompt": [ "0", "1", "2", "3", "4" ] }))
+    ind = Independent(m)
+    responses = []
+    for i in range(2):
+        r = Repeatable(ind)
+        s1 = r.sample("prompt")
+        s2 = r.sample("prompt")
+        responses.append(next(s1))
+        responses.append(next(s2))
+        responses.append(next(s1))
+    assert responses == ["0", "0", "1", "2", "2", "3"]
+
+
+class MockBufferedModel(_BaseBufferedModel):
+
+    def __init__(self, responses, max_batch):
+        super().__init__("mock", 1.0, max_batch=max_batch)
+        self.responses = responses
+        self.current_indexes = dict()
+        for prompt in responses:
+            self.current_indexes[prompt] = 0
+        self.num_queries = 0
+
+    def _query(self, prompt: str, n: int):
+        self.num_queries += 1
+        index = self.current_indexes[prompt]
+        responses = self.responses[prompt][index:index + n]
+        self.current_indexes[prompt] = index + n
+        return responses
+
+
+def test_batched():
+    m = MockBufferedModel({ "prompt": [ "0", "1", "2", "3", "4" ] }, max_batch=2)
+    responses = []
+    for r in islice(m.sample("prompt", batch=2), 4):
+        responses.append(r)
+    assert responses == ["0", "1", "2", "3"]
+    assert m.num_queries == 2
+
+
+def test_batched_limit():
+    m = MockBufferedModel({ "prompt": [ "0", "1", "2", "3", "4", "5" ] }, max_batch=2)
+    responses = []
+    for r in islice(m.sample("prompt", batch=3), 6):
+        responses.append(r)
+    assert responses == [ "0", "1", "2", "3", "4", "5" ]
+    assert m.num_queries == 3
+
+def test_batched_cached():
+    m = MockBufferedModel({ "prompt": [ "0", "1", "2", "3", "4" ] }, max_batch=2)
+    r = Repeatable(m)
+    for s in islice(r.sample("prompt"), 2):
+        pass
+    responses = []
+    start = m.num_queries
+    for s in islice(r.sample("prompt", batch=2), 4):
+        responses.append(s)
+    assert responses == ["0", "1", "2", "3"]
+    assert m.num_queries - start == 1
