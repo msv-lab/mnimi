@@ -4,7 +4,7 @@ LLM cache stores responses from an LLM to avoid redundant queries, making runs r
 
 This implementation:
 
-- Is single-file & dependency-free; to use it, just copy `cached_llm.py` to your project.
+- Is single-file, dependency-free, ~300 LOC; to use it, just copy `cached_llm.py` to your project.
 - Provides a single API function `sample(prompt: str, batch: int = 1) -> Iterator[str]`.
 - Supports agentic workflows like retries that conflict with naive caching.
 - Supports batch sampling (getting multiple responses for a single HTTP request).
@@ -148,3 +148,9 @@ models = [
     XMCP("ali/qwen2.5-7b-instruct", 1.0, alias="qwen2.5-7b")
 ]
 ```
+
+## Development
+
+To run tests, execute
+
+    uvx pytest

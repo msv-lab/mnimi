@@ -1,7 +1,7 @@
 import os
 import hashlib
 import json
-import pathlib
+from pathlib import Path
 import math
 from collections import deque
 
@@ -118,12 +118,12 @@ class OpenAICompatibleHTTPModel(_BaseBufferedModel):
         self,
         base_url: str,
         api_key: str,
-        model: str,
+        model_name: str,
         temperature: float,
         alias: Optional[str] = None,
         max_batch: int = 1
     ):
-        super().__init__(model, temperature, alias, max_batch)
+        super().__init__(model_name, temperature, alias, max_batch)
         self.base_url = base_url
         self.api_key = api_key
 
@@ -159,38 +159,38 @@ class OpenAICompatibleHTTPModel(_BaseBufferedModel):
 
 
 class FireworksAI(OpenAICompatibleHTTPModel):
-    def __init__(self, model: str, temperature: float, alias: Optional[str] = None, max_batch: int = 1):
+    def __init__(self, model_name: str, temperature: float, alias: Optional[str] = None, max_batch: int = 1):
         base_url = "https://api.fireworks.ai/inference/v1"
         api_key = os.environ["FIREWORKS_API_KEY"]
-        super().__init__(base_url, api_key, model, temperature, alias, max_batch)
+        super().__init__(base_url, api_key, model_name, temperature, alias, max_batch)
 
 
 class AI302(OpenAICompatibleHTTPModel):
-    def __init__(self, model: str, temperature: float, alias: Optional[str] = None, max_batch: int = 1):
+    def __init__(self, model_name: str, temperature: float, alias: Optional[str] = None, max_batch: int = 1):
         base_url = "https://api.302.ai/v1"
         api_key = os.environ["AI302_API_KEY"]
-        super().__init__(base_url, api_key, model, temperature, alias, max_batch)
+        super().__init__(base_url, api_key, model_name, temperature, alias, max_batch)
 
 
 class CloseAI(OpenAICompatibleHTTPModel):
-    def __init__(self, model: str, temperature: float, alias: Optional[str] = None, max_batch: int = 1):
+    def __init__(self, model_name: str, temperature: float, alias: Optional[str] = None, max_batch: int = 1):
         base_url = "https://api.openai-proxy.org/v1"
         api_key = os.environ["CLOSEAI_API_KEY"]
-        super().__init__(base_url, api_key, model, temperature, alias, max_batch)
+        super().__init__(base_url, api_key, model_name, temperature, alias, max_batch)
 
 
 class XMCP(OpenAICompatibleHTTPModel):
-    def __init__(self, model: str, temperature: float, alias: Optional[str] = None, max_batch: int = 1):
+    def __init__(self, model_name: str, temperature: float, alias: Optional[str] = None, max_batch: int = 1):
         base_url = "https://llm.xmcp.ltd"
         api_key = os.environ["XMCP_API_KEY"]
-        super().__init__(base_url, api_key, model, temperature, alias, max_batch)
+        super().__init__(base_url, api_key, model_name, temperature, alias, max_batch)
 
 
 class Independent(Model):
     """Ensure that each call of sample returns an independent sequence"""
 
     def __init__(self, inner: Model):
-        super().__init__(inner.model,
+        super().__init__(inner.model_name,
                          inner.temperature,
                          inner.alias,
                          inner.max_batch)
@@ -206,26 +206,26 @@ class Independent(Model):
            isinstance(self._inner, AI302):
             return self._inner.sample(prompt, batch)
         # for the same prompt, always return the same iterator
-        prompt_id = prompt_id(prompt)
-        if prompt_id not in self._inner_iters:
-            self._inner_iters[prompt_id] = self._inner.sample(prompt, batch)
-        self._inner_iters[prompt].set_batch_size(batch)
-        return self._inner_iters[prompt]
+        pid = prompt_id(prompt)
+        if pid not in self._inner_iters:
+            self._inner_iters[pid] = self._inner.sample(prompt, batch)
+        self._inner_iters[pid].set_batch_size(batch)
+        return self._inner_iters[pid]
 
 
 class _BaseBatchedCache(Model):
     """A cache that supports batch sampling, while abstracting the storage"""
 
     @abstractmethod
-    def _store(self, prompt_id: str, response: str):
+    def _store(self, pid: str, response: str):
         raise NotImplementedError()
 
     @abstractmethod
-    def _load(self, prompt_id: str) -> list[str]:
+    def _load(self, pid: str) -> list[str]:
         raise NotImplementedError()
     
     def __init__(self, inner: Model, fail_on_miss: bool = False):
-        super().__init__(inner.model,
+        super().__init__(inner.model_name,
                          inner.temperature,
                          inner.alias,
                          inner.max_batch)
@@ -237,7 +237,7 @@ class _BaseBatchedCache(Model):
         def __init__(self, base, prompt: str):
             self.base = base
             self.prompt = prompt
-            self.prompt_id = prompt_id(prompt)
+            self.pid = prompt_id(prompt)
             self.batch_size = 1
             self.current_index = 0
 
@@ -248,14 +248,14 @@ class _BaseBatchedCache(Model):
             return self
 
         def __next__(self) -> str:
-            cache = self.base._load(self.prompt_id)
+            cache = self.base._load(self.pid)
             if len(cache) > self.current_index:
                 self.current_index += 1
                 return cache[self.current_index - 1]
             if self.base.fail_on_miss:
                 raise ReplicationCacheMiss()
             fresh = next(self.base._inner.sample(self.prompt, self.batch_size))
-            self.base._store(self.prompt_id, fresh)
+            self.base._store(self.pid, fresh)
             self.current_index += 1
             return fresh
 
@@ -272,13 +272,13 @@ class Repeatable(_BaseBatchedCache):
         super().__init__(inner)
         self._cache = dict() # prompt_id -> list of responses
 
-    def _store(self, prompt_id: str, response: str):
-        if prompt_id not in self._cache:
-            self._cache[prompt_id] = []
-        self._cache[prompt_id].append(response)
+    def _store(self, pid: str, response: str):
+        if pid not in self._cache:
+            self._cache[pid] = []
+        self._cache[pid].append(response)
 
-    def _load(self, prompt_id: str) -> list[str]:
-        return self._cache.get(prompt_id, [])
+    def _load(self, pid: str) -> list[str]:
+        return self._cache.get(pid, [])
 
     def sample(self, prompt: str, batch: int = 1) -> BatchedIterator[str]:
         if isinstance(self._inner, Repeatable) or isinstance(self._inner, Persistent):
@@ -303,21 +303,21 @@ class Persistent(_BaseBatchedCache):
         self.cache_root = cache_root
         self.replication = replication
 
-    def _store(self, prompt_id: str, response: str):
-        d = _prompt_dir(prompt_id)
-        d.mkdir(exist_ok=True)
-        i = len(_list_numbered_files(d))
+    def _store(self, pid: str, response: str):
+        d = self._prompt_dir(pid)
+        d.mkdir(parents=True, exist_ok=True)
+        i = len(Persistent._list_numbered_files(d))
         f = d / f"{i}.md"
         f.write_text(response)
  
-    def _load(self, prompt_id: str) -> list[str]:
-        d = _prompt_dir(prompt_id)
-        return [f.read_text() for f in _list_numbered_files(d)]
+    def _load(self, pid: str) -> list[str]:
+        d = self._prompt_dir(pid)
+        return [f.read_text() for f in Persistent._list_numbered_files(d)]
 
-    def _prompt_dir(self, prompt_id: str) -> str:
+    def _prompt_dir(self, pid: str) -> str:
         t = f"{self.temperature:.3f}".rstrip("0").rstrip(".")
         model_key = f"{self.alias}_{t}"
-        return self.cache_dir / model_key / prompt_id
+        return self.cache_root / model_key / pid
 
     @staticmethod
     def _list_numbered_files(path: Path) -> List[str]:
