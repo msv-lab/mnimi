@@ -96,12 +96,14 @@ def test_nested_cache(tmp_path):
     s1 = c1.sample("prompt")
     next(s1)
     next(s1)
+    assert m1.num_iterated == 2
 
     m2 = MockModel({ "prompt": [ "0", "1" ] })
     c2 = Persistent(m2, f"{tmp_path}/a")
-    c2_nested = Persistent(m2, f"{tmp_path}/b")
+    c2_nested = Persistent(c2, f"{tmp_path}/b")
     s2 = c2_nested.sample("prompt")
     next(s2)
+    assert m2.num_iterated == 0
 
     m3 = MockModel({ "prompt": [ "0", "1" ] })
     c3 = Persistent(m3, f"{tmp_path}/b")
