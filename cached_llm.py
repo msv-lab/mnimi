@@ -198,12 +198,7 @@ class Independent(Model):
         self._inner_iters = {}  # prompt_hash -> sample sequence
 
     def sample(self, prompt: str, batch: int = 1) -> BatchedIterator[str]:
-        if isinstance(self._inner, Independent) or \
-           isinstance(self._inner, OpenAICompatibleHTTPModel) or \
-           isinstance(self._inner, XMCP) or \
-           isinstance(self._inner, CloseAI) or \
-           isinstance(self._inner, FireworksAI) or \
-           isinstance(self._inner, AI302):
+        if isinstance(self._inner, Independent):
             return self._inner.sample(prompt, batch)
         # for the same prompt, always return the same iterator
         pid = prompt_id(prompt)
