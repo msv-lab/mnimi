@@ -149,6 +149,17 @@ models = [
 ]
 ```
 
+## Measuring query time and token use
+
+The model provides an API to get total time taken by API queries, and the total number of input and output tokens:
+
+    m = AI302("gpt-4o", 1.0, max_batch=2)
+
+    # ... use model m ...
+
+    query_time = m.total_query_time()
+    in_tokens, out_tokens = m.total_token_count()
+
 ## Development
 
 To run tests, execute

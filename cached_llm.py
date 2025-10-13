@@ -1,11 +1,12 @@
 import os
+import time
 import hashlib
 import json
 from pathlib import Path
 import math
 from collections import deque
 
-from typing import Iterator, List, Optional, Deque, TypeVar, Protocol, Union
+from typing import Iterator, List, Optional, Deque, TypeVar, Protocol, Union, Tuple
 from abc import ABC, abstractmethod
 
 from urllib.request import Request, urlopen
@@ -44,6 +45,14 @@ class Model(ABC):
     def sample(self, prompt: str, batch: int = 1) -> BatchedIterator[str]:
         raise NotImplementedError()
 
+    @abstractmethod
+    def total_query_time(self) -> float:
+        raise NotImplementedError()
+
+    @abstractmethod
+    def total_token_count(self) -> Tuple[int, int]:
+        raise NotImplementedError()
+    
 
 class ReplicationCacheMiss(Exception):
     "Raised when a cache miss occurs in replication mode"
@@ -126,6 +135,8 @@ class OpenAICompatibleHTTPModel(_BaseBufferedModel):
         super().__init__(model_name, temperature, alias, max_batch)
         self.base_url = base_url
         self.api_key = api_key
+        self._total_token_count = (0,0)
+        self._total_query_time = 0.0
 
     def _post_json(self, path: str, payload: dict) -> dict:
         url = f"{self.base_url}{path}"
@@ -154,8 +165,19 @@ class OpenAICompatibleHTTPModel(_BaseBufferedModel):
             "n": n,
             "messages": [{"role": "user", "content": prompt}]
         }
+        start = time.perf_counter()
         resp = self._post_json("/chat/completions", payload)
+        self._total_query_time += time.perf_counter() - start
+        current_prompt_tokens, current_completion_tokens = self._total_token_count
+        self._total_token_count = (resp["usage"]["prompt_tokens"] + current_prompt_tokens,
+                                   resp["usage"]["completion_tokens"] + current_completion_tokens)
         return [str(c["message"]["content"]) for c in resp["choices"]]
+
+    def total_query_time(self) -> float:
+        return self._total_query_time
+
+    def total_token_count(self) -> Tuple[int, int]:
+        return self._total_token_count
 
 
 class FireworksAI(OpenAICompatibleHTTPModel):
@@ -207,6 +229,12 @@ class Independent(Model):
         self._inner_iters[pid].set_batch_size(batch)
         return self._inner_iters[pid]
 
+    def total_query_time(self) -> float:
+        return self._inner.total_query_time()
+
+    def total_token_count(self) -> Tuple[int, int]:
+        return self._inner.total_token_count()
+
 
 class _BaseBatchedCache(Model):
     """A cache that supports batch sampling, while abstracting the storage"""
@@ -257,7 +285,7 @@ class _BaseBatchedCache(Model):
     def sample(self, prompt: str, batch: int = 1) -> BatchedIterator[str]:
         i = _BaseBatchedCache._SharedCacheIterator(self, prompt)
         i.set_batch_size(batch)
-        return i
+        return i    
 
 
 class Repeatable(_BaseBatchedCache):
@@ -279,6 +307,12 @@ class Repeatable(_BaseBatchedCache):
         if isinstance(self._inner, Repeatable) or isinstance(self._inner, Persistent):
             return self._inner.sample(prompt, batch)
         return super().sample(prompt, batch)
+
+    def total_query_time(self) -> float:
+        return self._inner.total_query_time()
+
+    def total_token_count(self) -> Tuple[int, int]:
+        return self._inner.total_token_count()
     
 
 class Persistent(_BaseBatchedCache):
@@ -320,3 +354,10 @@ class Persistent(_BaseBatchedCache):
             return []
         md_files = list(path.glob('*.md'))
         return sorted(md_files, key=lambda f: int(f.stem))
+
+    def total_query_time(self) -> float:
+        return self._inner.total_query_time()
+
+    def total_token_count(self) -> Tuple[int, int]:
+        return self._inner.total_token_count()
+    
