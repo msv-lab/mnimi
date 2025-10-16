@@ -1,6 +1,7 @@
-# LLM Cache for Agentic Workflows
+# Mnimi - LLM Cache for Agentic Workflows
 
-LLM cache stores responses from an LLM to avoid redundant queries, making runs reproducible, faster, and cheaper, while also enabling deterministic debugging.
+Mnimi implements a cache design pattern that modularizes LLM workflows and ensures statistical integrity by enforcing per-component sample independence constraint.
+Mnimi helps to avoid redundant queries, making runs reproducible, faster, and cheaper, while also enabling deterministic debugging.
 
 This implementation
 
