@@ -12,6 +12,13 @@ This implementation
 - Supports cache slicing (extracting relevant parts of cache).
 - Supports multiple providers (302.ai, Fireworks, CloseAI, XMCP, etc).
 
+Details of the approach are discussed here:
+
+__Statistical Independence Aware Caching for LLM Workflows__<br/>
+Yihan Dai, Dimitrios Stamatios Bouras, Haoxiang Jia, Sergey Mechtaev<br/>
+LLM4Code@ICSE 2026<br/> 
+https://arxiv.org/abs/2511.22118
+
 
 ## Independent, Repeatable and Persistent Sampling
 
