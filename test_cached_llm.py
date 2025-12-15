@@ -39,6 +39,12 @@ class MockModel(Model):
         i.set_batch_size(batch)
         return i
 
+    def total_query_time(self):
+        pass
+
+    def total_token_count(self):
+        pass
+
 
 def test_persistent(tmp_path):
     m = MockModel({ "prompt": [ "0", "1", "2", "3", "4" ] })
@@ -130,6 +136,12 @@ class MockBufferedModel(_BaseBufferedModel):
         responses = self.responses[prompt][index:index + n]
         self.current_indexes[prompt] = index + n
         return responses
+
+    def total_query_time(self):
+        pass
+
+    def total_token_count(self):
+        pass
 
 
 def test_batched():

@@ -168,6 +168,43 @@ To get total time taken by API queries, and the total number of input and output
     query_time = m.total_query_time()
     in_tokens, out_tokens = m.total_token_count()
 
+## Structured Output and Auto-Retries
+
+The optional module `structured_output` provides convenience functions to robustly parse LLM output. It allows declaratively defining expected output specification:
+
+    output_spec = Seq([
+        Tag("analysis"),
+        Tag("final"),
+        Code(),
+    ])
+
+    output = """Some preface text
+
+    <analysis>reasoning...</analysis>
+
+    random chatter
+
+    <final>answer</final>
+
+    more stuff
+
+    ```python
+    print("hi")
+    tail text
+    ```
+    """
+    
+    result = parse(output_spec, output)  # ['reasoning...', 'answer', 'print("hi")\ntail text']
+    
+It also enables automatic retries until LLM satisfies output constraints:
+
+    result = query_retry(model, prompt, output_spec, retries=5)
+
+Futhermore, retries can depend on a data validator:
+
+    result = query_retry(model, prompt, output_spec, retries=5,
+                         validator=lambda x: len(x[0]) > 2)
+
 ## Development
 
 To run tests, execute
