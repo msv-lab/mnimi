@@ -205,7 +205,7 @@ It also enables automatic retries until LLM satisfies output constraints:
 Futhermore, retries can depend on a data validator:
 
     result = query_retry(model, prompt, output_spec, retries=5,
-                         validator=lambda x: len(x[1]) > 2)
+                         validator=lambda x: len(x[1]) >= 2)
 
 ## Development
 
