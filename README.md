@@ -172,29 +172,31 @@ To get total time taken by API queries, and the total number of input and output
 
 The optional module `structured_output` provides convenience functions to robustly parse LLM output. It allows declaratively defining expected output specification:
 
-    output_spec = Seq([
-        Tag("analysis"),
-        Tag("final"),
-        Code(),
-    ])
+    prompt = """
+    Choose one programming problem and present it inside <problem>...</problem> tags.
 
-    output = """Some preface text
+    Then provide at least two distinct solution approaches. For each approach, use this exact structure:
 
-    <analysis>reasoning...</analysis>
+    - Start with <algorithm>ALGORITHM_NAME</algorithm> on its own line.
+    - Immediately follow with a fenced Markdown code block containing a complete, runnable implementation.
 
-    random chatter
-
-    <final>answer</final>
-
-    more stuff
-
-    ```python
-    print("hi")
-    tail text
-    ```
+    Ensure each algorithm is meaningfully different (e.g., brute force vs dynamic programming
+    vs greedy vs divide-and-conquer), not just small variations.
     """
-    
-    result = parse(output_spec, output)  # ['reasoning...', 'answer', 'print("hi")\ntail text']
+
+    spec = Sequence([
+               Tag("problem"),
+               Repeat(
+                   Sequence([
+                       Tag("algorithm"),
+                       Code()
+                   ]))])
+
+    response = next(m.sample(prompt))
+
+    result = parse(spec, response)
+
+    print(result)  # ["problem description...", [["algorithm name", "algorithm code"], ...]]
     
 It also enables automatic retries until LLM satisfies output constraints:
 
@@ -203,7 +205,7 @@ It also enables automatic retries until LLM satisfies output constraints:
 Futhermore, retries can depend on a data validator:
 
     result = query_retry(model, prompt, output_spec, retries=5,
-                         validator=lambda x: len(x[0]) > 2)
+                         validator=lambda x: len(x[1]) > 2)
 
 ## Development
 

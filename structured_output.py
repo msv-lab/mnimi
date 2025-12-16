@@ -16,7 +16,7 @@ class Match:
 
 
 @dataclass(frozen=True)
-class Seq:
+class Sequence:
     parts: List["OutputSpec"]
 
     def _match(self, text: str, pos: int) -> Match:
@@ -90,56 +90,40 @@ class Code:
         return Match(start, end, code)
 
 
-def _match_rep(inner: "OutputSpec", text: str, pos: int, min_count: int) -> Match:
-    """Note: specs like Seq([Star(Tag("a")), Code(), Tag("a")]) are not supported because of greedy parsing
-    """
-    cur = pos
-    matches: List[Any] = []
-    start0: Optional[int] = None
-    last_end = pos
-
-    while True:
-        try:
-            m = inner._match(text, cur)
-        except LLMOutputError:
-            break
-
-        if m.end <= cur:
-            break
-
-        if start0 is None:
-            start0 = m.start
-        matches.append(m.value)
-        last_end = m.end
-        cur = m.end
-
-    if len(matches) < min_count:
-        raise LLMOutputError(f"Expected at least {min_count} occurrence(s), got {len(matches)} at {pos}")
-
-    if start0 is None:
-        start0 = pos
-    return Match(start0, last_end, matches)
-    
-
 @dataclass(frozen=True)
-class Star:
+class Repeat:
     """Kleene star"""
     inner: "OutputSpec"
 
     def _match(self, text: str, pos: int) -> Match:
-        _match_rep(self, text, pos, min_count=0)
+        """Note: specs like Seq([Star(Tag("a")), Code(), Tag("a")]) are not supported because of greedy parsing
+        """
+        cur = pos
+        matches: List[Any] = []
+        start0: Optional[int] = None
+        last_end = pos
+
+        while True:
+            try:
+                m = self.inner._match(text, cur)
+            except LLMOutputError:
+                break
+
+            if m.end <= cur:
+                break
+
+            if start0 is None:
+                start0 = m.start
+            matches.append(m.value)
+            last_end = m.end
+            cur = m.end
+
+        if start0 is None:
+            start0 = pos
+        return Match(start0, last_end, matches)
 
 
-@dataclass(frozen=True)
-class Plus:
-    """Non-empty list"""
-    inner: "OutputSpec"
-
-    def _match(self, text: str, pos: int) -> Match:
-        _match_rep(self, text, pos, min_count=1)
-    
-
-OutputSpec = Union[Seq, Tag, Code, Star, Plus]
+OutputSpec = Union[Sequence, Tag, Code, Repeat]
 
 
 def parse(spec: OutputSpec, text: str) -> Any:

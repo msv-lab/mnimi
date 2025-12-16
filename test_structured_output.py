@@ -1,11 +1,11 @@
 from structured_output import (
-    Seq, Tag, Code, Star, Plus,
+    Sequence, Tag, Code, Repeat,
     parse
 )
 
 
 def test_simple():
-    spec = Seq([
+    spec = Sequence([
         Tag("analysis"),
         Tag("final"),
         Code(),
