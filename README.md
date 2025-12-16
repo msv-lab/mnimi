@@ -192,7 +192,7 @@ The optional module `structured_output` provides convenience functions to robust
                        Code()
                    ]))])
 
-    response = next(m.sample(prompt))
+    response = next(model.sample(prompt))
 
     result = parse(spec, response)
 
@@ -200,11 +200,11 @@ The optional module `structured_output` provides convenience functions to robust
     
 It also enables automatic retries until LLM satisfies output constraints:
 
-    result = query_retry(model, prompt, output_spec, retries=5)
+    result = query_retry(model, prompt, spec, retries=5)
 
 Futhermore, retries can depend on a data validator:
 
-    result = query_retry(model, prompt, output_spec, retries=5,
+    result = query_retry(model, prompt, spec, retries=5,
                          validator=lambda x: len(x[1]) >= 2)
 
 ## Development
