@@ -1,6 +1,6 @@
 # Mnimi - LLM Cache for Agentic Workflows
 
-Mnimi implements a cache design pattern that modularizes LLM workflows and ensures statistical integrity by enforcing per-component sample independence constraints.
+Mnimi implements a local cache for LLM queries that enables mudular LLM workflows, while ensuring statistical integrity at the component level.
 Mnimi helps to avoid redundant queries, making runs reproducible, faster, and cheaper, while also enabling deterministic debugging.
 
 This implementation
