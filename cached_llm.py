@@ -180,6 +180,99 @@ class OpenAICompatibleHTTPModel(_BaseBufferedModel):
         return self._total_token_count
 
 
+class Ollama(_BaseBufferedModel):
+    """
+    Expected endpoint: POST {base_url}/api/chat
+    Body:
+      {
+        "model": "<model_id>",
+        "messages": [{"role": "user", "content": "<prompt>"}],
+        "stream": true|false,
+        "options": {"temperature": <float>}   # optional
+      }
+
+    Streaming response: newline-delimited JSON objects, with final line having:
+      done=true and token counts (prompt_eval_count, eval_count)
+    """
+
+    def __init__(
+        self,
+        model_name: str,
+        temperature: float,
+        base_url: str = "http://localhost:11434",        
+        alias: Optional[str] = None,
+        max_batch: int = 1,
+    ):
+        super().__init__(model_name, temperature, alias, max_batch)
+        self.base_url = base_url.rstrip("/")
+        self._total_token_count = (0, 0)  # (prompt, completion)
+        self._total_query_time = 0.0
+
+    def _post_json_stream(self, path: str, payload: dict):
+        url = f"{self.base_url}{path}"
+        data = json.dumps(payload).encode("utf-8")
+        headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": "Application",
+        }
+        req = Request(url, data=data, headers=headers, method="POST")
+        try:
+            return urlopen(req)  # caller must close
+        except HTTPError as e:
+            body = e.read().decode("utf-8", errors="ignore")
+            raise RuntimeError(f"HTTPError {e.code} {e.reason}: {body}") from e
+        except URLError as e:
+            raise RuntimeError(f"URLError: {e.reason}") from e
+
+    def _query(self, prompt: str, n: int) -> List[str]:
+        # Ollama /api/chat returns a single completion; emulate n by repeating calls.
+        out: List[str] = []
+        for _ in range(n):
+            payload = {
+                "model": self.model_name,
+                "messages": [{"role": "user", "content": prompt}],
+                "stream": True,
+                "options": {"temperature": self.temperature},
+            }
+
+            start = time.perf_counter()
+            parts: List[str] = []
+            prompt_tokens = completion_tokens = 0
+
+            resp = self._post_json_stream("/api/chat", payload)
+            try:
+                for raw_line in resp:
+                    line = raw_line.decode("utf-8", errors="ignore").strip()
+                    if not line:
+                        continue
+                    obj = json.loads(line)
+
+                    msg = obj.get("message") or {}
+                    parts.append(msg.get("content", ""))
+
+                    if obj.get("done") is True:
+                        prompt_tokens = int(obj.get("prompt_eval_count") or 0)
+                        completion_tokens = int(obj.get("eval_count") or 0)
+                        break
+            finally:
+                resp.close()
+
+            self._total_query_time += time.perf_counter() - start
+            cur_p, cur_c = self._total_token_count
+            self._total_token_count = (cur_p + prompt_tokens, cur_c + completion_tokens)
+
+            out.append("".join(parts))
+
+        return out
+
+    def total_query_time(self) -> float:
+        return self._total_query_time
+
+    def total_token_count(self) -> Tuple[int, int]:
+        return self._total_token_count
+
+
 class FireworksAI(OpenAICompatibleHTTPModel):
     def __init__(self, model_name: str, temperature: float, alias: Optional[str] = None, max_batch: int = 1):
         base_url = "https://api.fireworks.ai/inference/v1"
