@@ -422,6 +422,7 @@ class Persistent(_BaseBatchedCache):
         super().__init__(inner, replication)
         if isinstance(cache_root, str):
             cache_root = Path(cache_root)
+        cache_root = cache_root.expanduser()
         self.cache_root = cache_root
         self.replication = replication
 
