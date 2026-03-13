@@ -130,11 +130,15 @@ class OpenAICompatibleHTTPModel(_BaseBufferedModel):
         model_name: str,
         temperature: float,
         alias: Optional[str] = None,
-        max_batch: int = 1
+        max_batch: int = 1,
+        max_retries: int = 3,
+        retry_delay: float = 5.0
     ):
         super().__init__(model_name, temperature, alias, max_batch)
         self.base_url = base_url
         self.api_key = api_key
+        self.max_retries = max_retries
+        self.retry_delay = retry_delay
         self._total_token_count = (0,0)
         self._total_query_time = 0.0
 
@@ -144,19 +148,28 @@ class OpenAICompatibleHTTPModel(_BaseBufferedModel):
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
-            'Accept': 'application/json',            
+            'Accept': 'application/json',
             "User-Agent": "Application"
         }
-        req = Request(url, data=data, headers=headers, method="POST")
-        try:
-            with urlopen(req) as resp:
-                raw = resp.read()
-                return json.loads(raw.decode("utf-8"))
-        except HTTPError as e:
-            body = e.read().decode("utf-8", errors="ignore")
-            raise RuntimeError(f"HTTPError {e.code} {e.reason}: {body}") from e
-        except URLError as e:
-            raise RuntimeError(f"URLError: {e.reason}") from e
+        last_error = None
+        for attempt in range(self.max_retries):
+            req = Request(url, data=data, headers=headers, method="POST")
+            try:
+                with urlopen(req) as resp:
+                    raw = resp.read()
+                    return json.loads(raw.decode("utf-8"))
+            except HTTPError as e:
+                body = e.read().decode("utf-8", errors="ignore")
+                last_error = RuntimeError(f"HTTPError {e.code} {e.reason}: {body}")
+                last_error.__cause__ = e
+                if e.code < 500:
+                    raise last_error from e
+            except URLError as e:
+                last_error = RuntimeError(f"URLError: {e.reason}")
+                last_error.__cause__ = e
+            if attempt < self.max_retries - 1:
+                time.sleep(self.retry_delay)
+        raise last_error
 
     def _query(self, prompt: str, n: int) -> List[str]:
         payload = {
@@ -199,12 +212,16 @@ class Ollama(_BaseBufferedModel):
         self,
         model_name: str,
         temperature: float,
-        base_url: str = "http://localhost:11434",        
+        base_url: str = "http://localhost:11434",
         alias: Optional[str] = None,
         max_batch: int = 1,
+        max_retries: int = 3,
+        retry_delay: float = 5.0
     ):
         super().__init__(model_name, temperature, alias, max_batch)
         self.base_url = base_url.rstrip("/")
+        self.max_retries = max_retries
+        self.retry_delay = retry_delay
         self._total_token_count = (0, 0)  # (prompt, completion)
         self._total_query_time = 0.0
 
@@ -216,14 +233,23 @@ class Ollama(_BaseBufferedModel):
             "Accept": "application/json",
             "User-Agent": "Application",
         }
-        req = Request(url, data=data, headers=headers, method="POST")
-        try:
-            return urlopen(req)  # caller must close
-        except HTTPError as e:
-            body = e.read().decode("utf-8", errors="ignore")
-            raise RuntimeError(f"HTTPError {e.code} {e.reason}: {body}") from e
-        except URLError as e:
-            raise RuntimeError(f"URLError: {e.reason}") from e
+        last_error = None
+        for attempt in range(self.max_retries):
+            req = Request(url, data=data, headers=headers, method="POST")
+            try:
+                return urlopen(req)  # caller must close
+            except HTTPError as e:
+                body = e.read().decode("utf-8", errors="ignore")
+                last_error = RuntimeError(f"HTTPError {e.code} {e.reason}: {body}")
+                last_error.__cause__ = e
+                if e.code < 500:
+                    raise last_error from e
+            except URLError as e:
+                last_error = RuntimeError(f"URLError: {e.reason}")
+                last_error.__cause__ = e
+            if attempt < self.max_retries - 1:
+                time.sleep(self.retry_delay)
+        raise last_error
 
     def _query(self, prompt: str, n: int) -> List[str]:
         # Ollama /api/chat returns a single completion; emulate n by repeating calls.
@@ -274,31 +300,31 @@ class Ollama(_BaseBufferedModel):
 
 
 class FireworksAI(OpenAICompatibleHTTPModel):
-    def __init__(self, model_name: str, temperature: float, alias: Optional[str] = None, max_batch: int = 1):
+    def __init__(self, model_name: str, temperature: float, alias: Optional[str] = None, max_batch: int = 1, max_retries: int = 3, retry_delay: float = 5.0):
         base_url = "https://api.fireworks.ai/inference/v1"
         api_key = os.environ["FIREWORKS_API_KEY"]
-        super().__init__(base_url, api_key, model_name, temperature, alias, max_batch)
+        super().__init__(base_url, api_key, model_name, temperature, alias, max_batch, max_retries, retry_delay)
 
 
 class AI302(OpenAICompatibleHTTPModel):
-    def __init__(self, model_name: str, temperature: float, alias: Optional[str] = None, max_batch: int = 1):
+    def __init__(self, model_name: str, temperature: float, alias: Optional[str] = None, max_batch: int = 1, max_retries: int = 3, retry_delay: float = 5.0):
         base_url = "https://api.302.ai/v1"
         api_key = os.environ["AI302_API_KEY"]
-        super().__init__(base_url, api_key, model_name, temperature, alias, max_batch)
+        super().__init__(base_url, api_key, model_name, temperature, alias, max_batch, max_retries, retry_delay)
 
 
 class CloseAI(OpenAICompatibleHTTPModel):
-    def __init__(self, model_name: str, temperature: float, alias: Optional[str] = None, max_batch: int = 1):
+    def __init__(self, model_name: str, temperature: float, alias: Optional[str] = None, max_batch: int = 1, max_retries: int = 3, retry_delay: float = 5.0):
         base_url = "https://api.openai-proxy.org/v1"
         api_key = os.environ["CLOSEAI_API_KEY"]
-        super().__init__(base_url, api_key, model_name, temperature, alias, max_batch)
+        super().__init__(base_url, api_key, model_name, temperature, alias, max_batch, max_retries, retry_delay)
 
 
 class XMCP(OpenAICompatibleHTTPModel):
-    def __init__(self, model_name: str, temperature: float, alias: Optional[str] = None, max_batch: int = 1):
+    def __init__(self, model_name: str, temperature: float, alias: Optional[str] = None, max_batch: int = 1, max_retries: int = 3, retry_delay: float = 5.0):
         base_url = "https://llm.xmcp.ltd"
         api_key = os.environ["XMCP_API_KEY"]
-        super().__init__(base_url, api_key, model_name, temperature, alias, max_batch)
+        super().__init__(base_url, api_key, model_name, temperature, alias, max_batch, max_retries, retry_delay)
 
 
 class Independent(Model):
